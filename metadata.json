@@ -1,0 +1,5 @@
+{
+  "name": "Writing Feedback Assistant",
+  "description": "An AI-powered web application that provides constructive feedback on student writing. Users input their writing requirements, a specific prompt, and their text to receive detailed, categorized suggestions for improvement from Gemini.",
+  "requestFramePermissions": []
+}
