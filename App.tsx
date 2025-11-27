@@ -61,9 +61,9 @@ const HelpModal: React.FC<{ isOpen: boolean, onClose: () => void }> = ({ isOpen,
 };
 
 const App: React.FC = () => {
-    const [requirements, setRequirements] = useState<string>('');
-const [prompt, setPrompt] = useState<string>('');
-const [studentWriting, setStudentWriting] = useState<string>('');
+    const [requirements, setRequirements] = useState<string>('Write a short, friendly response.');
+    const [prompt, setPrompt] = useState<string>('What is one way to make new friends at school, and what words will you use?');
+    const [studentWriting, setStudentWriting] = useState<string>(`One way to make new friend is a question many people usually ask. However, for me I have any ways. First, you can join club or activity you like such as: football, badminton, or basketball,... Second, some people can't understand or know the lesson and if you know that you will help them but before you need to ask them "Do you need help" or "Do you want to study together". They will happy and want to make friend with you . Thirdly, at the break time you can ask them go out to play something with you or eat some fast food , you can ask some question like "Do you want to play games with me" or "Do you want to eat some fast food" if they want they will be allow. By use that way you can have a lot of new friends.`);
 
     const [apiKey, setApiKey] = useState<string>('');
     const [englishLevel, setEnglishLevel] = useState<string>('B1 Intermediate');
