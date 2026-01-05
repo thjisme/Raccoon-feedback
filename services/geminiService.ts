@@ -11,19 +11,24 @@ export async function getWritingFeedback(
 ): Promise<AIFeedback> {
     const ai = new GoogleGenAI({ apiKey });
 
-    const levelCode = englishLevel.split(' ')[0]; // "B1 Intermediate" -> "B1"
-    const cefrLevels = ["A1", "A2", "B1", "B2", "C1", "C2"];
-    const levelIndex = cefrLevels.indexOf(levelCode);
+    const levelCode = englishLevel.split(' ')[0]; 
+    const levelIndex = ["A1", "A2", "B1", "B2", "C1", "C2"].indexOf(levelCode);
 
     // --- Base Schema Definition ---
     const baseSuggestionSchema = {
         type: Type.OBJECT,
         properties: {
-            original: { type: Type.STRING, description: "The exact phrase from the student's original text OR the idiom itself for the 'Collocations and Idioms' category." },
-            changed: { type: Type.STRING, description: "The corrected version of the phrase OR an example sentence for the idiom." },
-            explanation: { type: Type.STRING, description: "In Vietnamese, explain why the change is needed OR provide the idiom's meaning." },
+            // STRICTER DESCRIPTION: Force exact copy
+            original: { 
+                type: Type.STRING, 
+                description: "The EXACT substring from the student's raw text. Do NOT autocorrect. If they wrote 'First, students', you must return 'First, students'." 
+            },
+            changed: { type: Type.STRING, description: "The corrected version." },
+            explanation: { type: Type.STRING, description: "In Vietnamese, explain why the change is needed." },
+            rule_summary: { type: Type.STRING, description: "A very short, simple (A2 level) English imperative sentence (max 8 words) summarizing the rule." },
+            rule_meaning_vn: { type: Type.STRING, description: "The Vietnamese translation of the 'rule_summary'." },
         },
-        required: ["original", "changed", "explanation"],
+        required: ["original", "changed", "explanation", "rule_summary", "rule_meaning_vn"],
     };
 
     const baseCategorySchema = {
@@ -31,8 +36,8 @@ export async function getWritingFeedback(
         properties: {
             title: { type: Type.STRING },
             score: { type: Type.INTEGER, description: "Score from 1 to 10." },
-            strengths: { type: Type.ARRAY, items: { type: Type.STRING }, description: "In Vietnamese, list the strengths." },
-            weaknesses: { type: Type.ARRAY, items: { type: Type.STRING }, description: "In Vietnamese, list the weaknesses." },
+            strengths: { type: Type.ARRAY, items: { type: Type.STRING }, description: "In Vietnamese." },
+            weaknesses: { type: Type.ARRAY, items: { type: Type.STRING }, description: "In Vietnamese." },
             suggestions: { type: Type.ARRAY, items: baseSuggestionSchema },
         },
         required: ["title", "score", "strengths", "weaknesses", "suggestions"],
@@ -41,8 +46,8 @@ export async function getWritingFeedback(
     const schema: any = {
         type: Type.OBJECT,
         properties: {
-            overallScore: { type: Type.INTEGER, description: "An overall score from 1 to 100." },
-            overallFeedback: { type: Type.STRING, description: "A summary of the feedback." },
+            overallScore: { type: Type.INTEGER },
+            overallFeedback: { type: Type.STRING },
             categories: {
                 type: Type.ARRAY,
                 items: baseCategorySchema
@@ -51,7 +56,6 @@ export async function getWritingFeedback(
         required: ["overallScore", "overallFeedback", "categories"],
     };
     
-    // --- Define Categories ---
     const dynamicCategories = [
         "Writing Requirements Adherence",
         "Grammatical Range and Accuracy",
@@ -61,18 +65,17 @@ export async function getWritingFeedback(
         "Collocations and Idioms"
     ];
 
-    if (levelIndex >= 4) { // C1 and above
+    if (levelIndex >= 4) { 
         schema.properties.advancedEnrichment = {
             type: Type.OBJECT,
-            description: "A table of advanced grammar and vocabulary to elevate the writing.",
             properties: {
                 grammar: {
                     type: Type.ARRAY,
                     items: {
                         type: Type.OBJECT,
                         properties: {
-                            structure: { type: Type.STRING, description: "Name of the advanced grammar structure (e.g., 'Inversion')." },
-                            example: { type: Type.STRING, description: "An example sentence using the structure, relevant to the student's topic." },
+                            structure: { type: Type.STRING },
+                            example: { type: Type.STRING },
                         },
                         required: ["structure", "example"],
                     }
@@ -82,9 +85,9 @@ export async function getWritingFeedback(
                     items: {
                         type: Type.OBJECT,
                         properties: {
-                            word: { type: Type.STRING, description: "An advanced vocabulary word or phrase." },
-                            definition: { type: Type.STRING, description: "A simple definition of the word." },
-                            example: { type: Type.STRING, description: "An example sentence using the word, relevant to the student's topic." },
+                            word: { type: Type.STRING },
+                            definition: { type: Type.STRING },
+                            example: { type: Type.STRING },
                         },
                          required: ["word", "definition", "example"],
                     }
@@ -94,7 +97,7 @@ export async function getWritingFeedback(
         };
     }
     
-    // --- Build the Prompt ---
+    // --- UPDATED PROMPT WITH ANTI-HALLUCINATION RULES ---
     let fullPrompt = `You are an expert English writing coach. Analyze the following student's writing based on their stated requirements and prompt. Your feedback must be constructive, insightful, and tailored to the student's English level: ${englishLevel}.
 
     **1. Writing Requirements:** ${requirements}
@@ -104,26 +107,22 @@ export async function getWritingFeedback(
     ${studentWriting}
     ---
 
-    Your task is to provide feedback in a structured JSON format. The feedback must include a detailed analysis for each of these categories: ${dynamicCategories.join(', ')}.
+    Your task is to provide feedback in a structured JSON format. The feedback must include a detailed analysis for each of these 6 categories: ${dynamicCategories.join(', ')}.
 
-    **Key Instructions:**
-    - **Localization:** All 'strengths' and 'weaknesses' descriptions MUST be in Vietnamese. All 'explanation' fields in suggestions must ALSO be in Vietnamese.
-    - **Writing Requirements Adherence:** This is the MOST important category. The student's writing has exactly ${wordCount} words. Strictly assess if this meets the specified word count requirement. You MUST use this provided word count in your feedback for this category. Also, assess all other requirements like tone, format, etc.
-    - **Suggestions:** For each suggestion, provide the *exact* original text snippet and the suggested change.
-    - **Suggestion Quality and Accuracy:** This is critical. All your suggestions in the 'changed' field must be grammatically flawless and logically sound within the context of the student's writing.
-        - **Articles:** Pay close attention to articles (e.g., 'join a club or an activity' is correct for singular countable nouns).
-        - **Contextual Agreement:** Ensure suggestions match the overall context. For example, if the writer describes multiple methods, a singular phrase like 'By using that way' should be corrected to a plural form like 'By using these ways'.
-        - **Review:** Double-check every suggestion for accuracy.
-    - **Scoring:** Be consistent with your scoring from 1-10 for categories.
-    - **Think Out of the Box:** Provide creative and insightful suggestions that go beyond simple error correction, helping the student express their ideas more effectively.
-    - **Collocations and Idioms:** For this category, identify the main topic of the writing (e.g., 'friendship'). Then, in the 'suggestions' array for this category, provide 3-4 relevant idioms. For each idiom, you MUST use the suggestion structure as follows:
-        - "original": The idiom itself (e.g., "A friend in need is a friend indeed").
-        - "changed": A relevant example sentence using the idiom.
-        - "explanation": The idiom's meaning, in Vietnamese.`;
+    **CRITICAL RULES - READ CAREFULLY:**
+    1. **NO FALSE POSITIVES (Crucial):** Before creating a suggestion, CHECK if the student *already* did it correctly. 
+       - Example: If the student wrote "First, students..." (with a comma), DO NOT generate a suggestion telling them to add a comma.
+       - Only generate a suggestion if there is an ACTUAL error or a Clear improvement needed.
+    2. **Exact 'Original' Text:** The 'original' field MUST be an exact copy-paste from the student's writing. Do NOT fix typos, capitalization, or punctuation in the 'original' field.
+    3. **Localization:** All 'strengths', 'weaknesses' and 'explanation' fields MUST be in Vietnamese.
+    4. **Rule Summary:** Provide a 'rule_summary' (Short A2 English command) AND a 'rule_meaning_vn' (Vietnamese translation).
+    5. **Word Count:** The student's writing has exactly ${wordCount} words. Strictly assess if this meets the requirement.
+    6. **Collocations:** "original" = idiom; "changed" = example; "explanation" = meaning (VN); "rule_summary" = essence (EN); "rule_meaning_vn" = essence (VN).
+    `;
 
-    if (levelIndex >= 4) { // C1 and above
+    if (levelIndex >= 4) {
         fullPrompt += `
-        - **Advanced Enrichment:** Since this is a C1/C2 level student, you MUST provide a table of advanced grammar and vocabulary relevant to their topic to help them make their writing extraordinary. This should be in the 'advancedEnrichment' field.`;
+        - **Advanced Enrichment:** Provide advanced grammar and vocabulary in the 'advancedEnrichment' field.`;
     }
 
     try {
@@ -138,9 +137,19 @@ export async function getWritingFeedback(
 
         const jsonStr = response.text.trim();
         const feedbackObject = JSON.parse(jsonStr);
+
+        // --- MATH FIX: Recalculate Overall Score ---
+        if (feedbackObject.categories && feedbackObject.categories.length > 0) {
+            const totalPoints = feedbackObject.categories.reduce((sum: number, cat: any) => sum + cat.score, 0);
+            const maxPoints = feedbackObject.categories.length * 10;
+            
+            // Calculate percentage and round to nearest integer
+            feedbackObject.overallScore = Math.round((totalPoints / maxPoints) * 100);
+        }
+
         return feedbackObject;
     } catch (e) {
         console.error("Error parsing Gemini response:", e);
-        throw new Error("Failed to get feedback from the AI. The response might not be valid JSON. Please try again.");
+        throw new Error("Failed to get feedback from the AI. Please try again.");
     }
 }
