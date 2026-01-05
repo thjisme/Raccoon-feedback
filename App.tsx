@@ -66,7 +66,7 @@ const App: React.FC = () => {
     const [studentWriting, setStudentWriting] = useState<string>('');
 
     const [apiKey, setApiKey] = useState<string>('');
-    const [englishLevel, setEnglishLevel] = useState<string>('B1 Intermediate');
+    const [englishLevel, setEnglishLevel] = useState<string>('A2 Elementary');
     const [isHelpModalOpen, setIsHelpModalOpen] = useState<boolean>(false);
     
     const [isLoading, setIsLoading] = useState<boolean>(false);
