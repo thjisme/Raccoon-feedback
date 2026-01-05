@@ -1,8 +1,9 @@
-
 export interface Suggestion {
   original: string;
   changed: string;
   explanation: string;
+  rule_summary: string;
+  rule_meaning_vn: string; // New field for Vietnamese meaning
 }
 
 export interface FeedbackCategory {
