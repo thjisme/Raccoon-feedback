@@ -5,6 +5,7 @@ import FeedbackDisplay from './components/FeedbackDisplay';
 import Spinner from './components/Spinner';
 import ErrorMessage from './components/ErrorMessage';
 import { getWritingFeedback } from './services/geminiService';
+import { Analytics } from "@vercel/analytics/react";
 import type { AIFeedback } from './types';
 
 const HelpModal: React.FC<{ isOpen: boolean, onClose: () => void }> = ({ isOpen, onClose }) => {
@@ -189,6 +190,7 @@ const App: React.FC = () => {
                 </div>
             </main>
             <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} />
+            <Analytics />
         </div>
     );
 };
